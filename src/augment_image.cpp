@@ -175,7 +175,8 @@ shared_ptr<augment::image::params> augment::image::param_factory::make_params(
         {
             image_scale = nervana::image::calculate_scale(input_size, output_width, output_height);
         }
-        input_size                   = input_size * image_scale;
+        input_size = input_size * image_scale;
+
         settings->output_size.width  = nervana::unbiased_round(input_size.width);
         settings->output_size.height = nervana::unbiased_round(input_size.height);
     }
@@ -190,6 +191,11 @@ shared_ptr<augment::image::params> augment::image::param_factory::make_params(
         float      image_scale            = scale(random);
         float      _horizontal_distortion = horizontal_distortion(random);
         cv::Size2f out_shape(output_width * _horizontal_distortion, output_height);
+
+        auto percent        = static_cast<float>(256) / std::min(input_width, input_height);
+        auto resized_width  = static_cast<int>(std::round(input_width * percent));
+        auto resized_height = static_cast<int>(std::round(input_height * percent));
+        input_size          = cv::Size(resized_width, resized_height);
 
         cv::Size2f cropbox_size = nervana::image::cropbox_max_proportional(input_size, out_shape);
         if (do_area_scale)

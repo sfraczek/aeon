@@ -150,7 +150,10 @@ cv::Mat image::transformer::transform_single_image(shared_ptr<augment::image::pa
     else
         expandedImage = rotatedImage;
 
-    cv::Mat croppedImage = expandedImage(img_xform->cropbox);
+    cv::Mat resizedShortImage;
+    image::resize_short(expandedImage, resizedShortImage, 256);
+
+    cv::Mat croppedImage = resizedShortImage(img_xform->cropbox);
     image::add_padding(croppedImage, img_xform->padding, img_xform->padding_crop_offset);
 
     cv::Mat resizedImage;
@@ -252,6 +255,7 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
         }
         else
         {
+            std::array<int, 3> bgr_to_rgb{{2, 1, 0}};
             // methods for image
             source.push_back(input_image);
             if (m_channel_major)
@@ -261,7 +265,14 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
                     target.emplace_back(
                         img.size(), cv_type, (char*)(outbuf_i + ch * img.total() * element_size));
                     from_to.push_back(ch);
-                    from_to.push_back(ch);
+                    if ((false))
+                    {
+                        from_to.push_back(ch);
+                    }
+                    else
+                    {
+                        from_to.push_back(bgr_to_rgb[ch]);
+                    }
                 }
             }
             else
@@ -271,7 +282,14 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
                 for (int ch = 0; ch < m_channels; ch++)
                 {
                     from_to.push_back(ch);
-                    from_to.push_back(ch);
+                    if ((false))
+                    {
+                        from_to.push_back(ch);
+                    }
+                    else
+                    {
+                        from_to.push_back(bgr_to_rgb[ch]);
+                    }
                 }
             }
             image::convert_mix_channels(source, target, from_to);
