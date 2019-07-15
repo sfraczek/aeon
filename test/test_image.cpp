@@ -258,7 +258,7 @@ bool check_value(shared_ptr<image::decoded> transformed, int x0, int y0, int x1,
 }
 
 // TODO(sfraczek): add for fixed_aspect_ratio testing other images than height
-// * width and also a grayscale image for testing converting  to 3 channel
+// * width
 void test_rgb_to_bgr(int width, int height, bool channel_major, bool fixed_aspect_ratio)
 {
     vector<cv::Mat> indexed_images = {generate_indexed_image(height, width),
