@@ -63,9 +63,11 @@ public:
     uint32_t    width;
     std::string output_type{"uint8_t"};
 
-    bool     bgr_to_rgb    = false;
-    bool     channel_major = true;
-    uint32_t channels      = 3;
+    bool                bgr_to_rgb    = false;
+    bool                channel_major = true;
+    uint32_t            channels      = 3;
+    std::vector<double> mean          = {};
+    std::vector<double> stddev        = {};
 
     std::string name;
 
@@ -85,6 +87,8 @@ private:
         ADD_SCALAR(bgr_to_rgb, mode::OPTIONAL),
         ADD_SCALAR(channel_major, mode::OPTIONAL),
         ADD_SCALAR(channels, mode::OPTIONAL, [](uint32_t v) { return v == 1 || v == 3; }),
+        ADD_SCALAR(mean, mode::OPTIONAL),
+        ADD_SCALAR(stddev, mode::OPTIONAL),
         ADD_SCALAR(output_type, mode::OPTIONAL, [](const std::string& v) {
             return output_type::is_valid_type(v);
         })};
@@ -179,9 +183,11 @@ public:
 private:
     void split(cv::Mat&, char*);
 
-    bool       m_channel_major;
-    bool       m_fixed_aspect_ratio;
-    shape_type m_stype;
-    uint32_t   m_channels;
-    bool       m_bgr_to_rgb;
+    bool                m_channel_major;
+    bool                m_fixed_aspect_ratio;
+    shape_type          m_stype;
+    uint32_t            m_channels;
+    bool                m_bgr_to_rgb;
+    std::vector<double> m_mean;
+    std::vector<double> m_stddev;
 };

@@ -65,6 +65,14 @@ void image::config::validate()
         throw invalid_argument(
             "invalid config: bgr_to_rgb can be 'true' only for channels set to '3'");
     }
+    if (!mean.empty() || !stddev.empty())
+    {
+        if (mean.size() != channels || stddev.size() != channels)
+        {
+            throw invalid_argument(
+                "Size of 'mean' and 'stddev' must be equal to number of channels or empty");
+        }
+    }
 }
 
 /* Extract */
@@ -114,7 +122,6 @@ shared_ptr<image::decoded> image::extractor::extract(const void* inbuf, size_t i
 image::transformer::transformer(const image::config&)
 {
 }
-
 shared_ptr<image::decoded>
     image::transformer::transform(shared_ptr<augment::image::params> img_xform,
                                   shared_ptr<image::decoded>         img) const
@@ -136,10 +143,12 @@ shared_ptr<image::decoded>
 /**
  * rotate
  * expand
+ * resize_short
  * crop
  * resize
  * distort
  * flip
+ * normalize
  */
 cv::Mat image::transformer::transform_single_image(shared_ptr<augment::image::params> img_xform,
                                                    cv::Mat& single_img) const
@@ -205,6 +214,8 @@ image::loader::loader(const image::config& cfg, bool fixed_aspect_ratio)
     , m_stype{cfg.get_shape_type()}
     , m_channels{cfg.channels}
     , m_bgr_to_rgb{cfg.bgr_to_rgb}
+    , m_mean{cfg.mean}
+    , m_stddev{cfg.stddev}
 {
 }
 
@@ -216,7 +227,7 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
     auto element_size = m_stype.get_otype().get_size();
     // if m_channels is 3 but images has 1 channel it is converted to
     // 3 channels so we need m_channels instead of input channels
-    int  image_size   = m_channels * input->get_image(0).total() * element_size;
+    int         image_size = m_channels * input->get_image(0).total() * element_size;
     vector<int> from_to;
     if (m_channels == 3)
     {
@@ -236,8 +247,9 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
 
     for (int i = 0; i < input->get_image_count(); i++)
     {
-        auto            outbuf_i    = outbuf + (i * image_size);
-        auto            input_image = input->get_image(i);
+        auto outbuf_i    = outbuf + (i * image_size);
+        auto input_image = input->get_image(i);
+
         vector<cv::Mat> source;
         vector<cv::Mat> target;
 
@@ -263,23 +275,26 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
                 cv::Mat  r_roi = r(roi);
                 // TODO(sfraczek): unify this to mix_channels.
                 //  split will fail for 1 channel input image
+                std::vector<cv::Mat> channels;
                 if (m_bgr_to_rgb)
                 {
-                    cv::Mat channels[3] = {r_roi, g_roi, b_roi};
+                    channels = {r_roi, g_roi, b_roi};
                     cv::split(input_image, channels);
                 }
                 else
                 {
-                    cv::Mat channels[3] = {b_roi, g_roi, r_roi};
+                    channels = {b_roi, g_roi, r_roi};
                     cv::split(input_image, channels);
                 }
+                // channelwise call
+                image::normalize(channels, m_mean, m_stddev);
             }
             else
             {
-              // TODO(sfraczek): what is this shape from? what are the channels?
-              // why do we take this values from different places like
-              // m_channels, shape[2]. This channels should be identical to
-              // input channels if input_image channels are 3 here
+                // TODO(sfraczek): what is this shape from? what are the channels?
+                // why do we take this values from different places like
+                // m_channels, shape[2]. This channels should be identical to
+                // input channels if input_image channels are 3 here
                 int     channels = shape[2];
                 int     width    = shape[1];
                 int     height   = shape[0];
@@ -288,6 +303,8 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
                 source.push_back(input_image);
                 target.push_back(target_roi);
                 image::convert_mix_channels(source, target, from_to);
+                // single image call
+                image::normalize(target, m_mean, m_stddev);
             }
         }
         else
@@ -310,6 +327,8 @@ void image::loader::load(const vector<void*>& outlist, shared_ptr<image::decoded
                     input_image.size(), CV_MAKETYPE(cv_type, m_channels), (char*)(outbuf_i));
             }
             image::convert_mix_channels(source, target, from_to);
+            // 3 channel single image
+            image::normalize(target, m_mean, m_stddev);
         }
     }
 }
