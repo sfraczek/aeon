@@ -376,6 +376,60 @@ TEST(image, bgr_to_rgb_channel_major_fixed_aspect_ratio)
     test_rgb_to_bgr(width, height, channel_major, fixed_aspect_ratio);
 }
 
+TEST(image, normalize)
+{
+    int width    = 256;
+    int height   = 256;
+    int channels = 3;
+
+    std::vector<double> mean{0.5, 0.5, 0.};
+
+    double              dev = 0.28980498288430989;
+    std::vector<double> stddev{dev, dev, 0.};
+
+    auto indexed = generate_indexed_image(height, width);
+
+    auto total_bytes = height * width * channels * sizeof(float);
+
+    std::vector<unsigned char> output_image(total_bytes);
+
+    nlohmann::json js = {{"width", width},
+                         {"height", height},
+                         {"channels", channels},
+                         {"output_type", "float"},
+                         {"channel_major", false},
+                         {"mean", mean},
+                         {"stddev", stddev}};
+    image::config cfg(js);
+
+    auto decoded = make_shared<image::decoded>();
+    decoded->add(indexed);
+
+    image::loader loader(cfg, false);
+    loader.load({output_image.data()}, decoded);
+
+    // normalized image is (X/255 - mean) / stddev
+
+    float* data  = reinterpret_cast<float*>(output_image.data());
+    size_t index = 0;
+    for (int row = 0; row < height; row++)
+    {
+        for (int col = 0; col < width; col++)
+        {
+            EXPECT_NEAR(data[index],
+                        (indexed.data[index] / 255. - mean[0]) / (stddev[0] ? stddev[0] : 1),
+                        1e-5);
+            EXPECT_NEAR(data[index + 1],
+                        (indexed.data[index + 1] / 255. - mean[1]) / (stddev[1] ? stddev[1] : 1),
+                        1e-5);
+            EXPECT_NEAR(data[index + 2],
+                        (indexed.data[index + 2] / 255. - mean[2]) / (stddev[2] ? stddev[2] : 1),
+                        1e-5);
+            index += 3;
+        }
+    }
+}
+
 TEST(image, transform_crop)
 {
     auto                  indexed = generate_indexed_image(256, 256);
