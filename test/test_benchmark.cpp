@@ -21,6 +21,7 @@
 #include "block_loader_file.hpp"
 #include "block_manager.hpp"
 #include "provider_factory.hpp"
+#include "batch_iterator.hpp"
 
 using namespace std;
 using namespace nervana;
@@ -110,22 +111,25 @@ TEST(benchmark, cache)
     }
 }
 
+#define NOT_IMPLEMENTED throw std::runtime_error("not implemented");
 /* dummy_block_manager
  *
  * Generates random images.
  *
  */
-class dummy_block_manager : public async_manager<encoded_record_list, encoded_record_list>
+class dummy_block_manager : virtual block_manager
 {
-    class generator : virtual async_manager_source<encoded_record_list>
+    class generator
+        : public block_loader_source,
+          public async_manager<std::vector<std::vector<std::string>>, encoded_record_list>
     {
-        generator() {}
-        virtual ~generator() {}
-        virtual encoded_record_list* next()                      = 0;
-        virtual size_t               record_count() const        = 0;
-        virtual size_t               elements_per_record() const = 0;
-        virtual void                 reset()                     = 0;
-        virtual void                 suspend_output() {}
+    public:
+        encoded_record_list* filler() override;
+        size_t               block_size() const override { NOT_IMPLEMENTED }
+        size_t               block_count() const override { NOT_IMPLEMENTED }
+        size_t               record_count() const override { NOT_IMPLEMENTED }
+        size_t               elements_per_record() const override { NOT_IMPLEMENTED }
+        source_uid_t         get_uid() const override { NOT_IMPLEMENTED }
     };
 
 public:
@@ -133,9 +137,10 @@ public:
                         size_t block_count,
                         size_t record_count,
                         size_t elements_per_record)
-        : async_manager<encoded_record_list, encoded_record_list>{make_shared<async_manager_source<
-                                                                      encoded_record_list>>(),
-                                                                  "dummy_block_manager"}
+        : async_manager<encoded_record_list,
+                        encoded_record_list>{static_pointer_cast<block_loader_source>(
+                                                 make_shared<generator>()),
+                                             "dummy_block_manager"}
         , m_current_block_number{0}
         , m_block_size{block_size}
         , m_block_count{block_count}
@@ -260,25 +265,27 @@ TEST(benchmark, decode_and_transform)
                    {"etl", {image_config, label_config}},
                    {"augmentation", aug_config}};
 
-    auto m_provider = provider_factory::create(config_json);
+    auto m_provider = provider_factory::create(config);
 
     unsigned int threads_num =
         decode_thread_count != 0 ? decode_thread_count : std::thread::hardware_concurrency();
 
+    const int m_input_multiplier = 8;
     const int decode_size = batch_size * ((threads_num * m_input_multiplier - 1) / batch_size + 1);
-    m_batch_iterator      = make_shared<batch_iterator>(manager, decode_size);
+    auto      m_batch_iterator =
+        make_shared<batch_iterator>(static_pointer_cast<block_manager>(manager), decode_size);
 
-    m_decoder = make_shared<batch_decoder>(m_batch_iterator,
-                                           decode_size,
-                                           decode_thread_count,
-                                           false /*pinned*/,
-                                           m_provider,
-                                           random_seed);
+    auto m_decoder = make_shared<batch_decoder>(m_batch_iterator,
+                                                decode_size,
+                                                decode_thread_count,
+                                                false /*pinned*/,
+                                                m_provider,
+                                                0 /*random_seed*/);
 
-    m_final_stage =
-        make_shared<batch_iterator_fbm>(m_decoder, batch_size, m_provider, !batch_major);
+    auto m_final_stage =
+        make_shared<batch_iterator_fbm>(m_decoder, batch_size, m_provider, false/*!batch_major)*/;
 
-    m_output_buffer_ptr = m_final_stage->next();
+    auto m_output_buffer_ptr = m_final_stage->next();
 }
 
 // TODO(sfraczek): move benchmarks from test_loader.cpp and other test files here
