@@ -18,7 +18,7 @@
 
 #include <atomic>
 
-#include "opencv2/opencv.hpp"
+#include <opencv2/core/mat.hpp>
 
 #include "etl_image.hpp"
 #include "buffer_batch.hpp"

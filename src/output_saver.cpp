@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "boost/filesystem/path.hpp"
+#include <opencv2/imgcodecs.hpp>
 
 #include "output_saver.hpp"
 
