@@ -31,7 +31,7 @@ namespace nervana
 class nervana::batch_decoder : public async_manager<encoded_record_list, fixed_buffer_map>
 {
 public:
-    batch_decoder(std::shared_ptr<batch_iterator>            b_itor,
+    batch_decoder(std::shared_ptr<async_manager_source<encoded_record_list>>            b_itor,
                   size_t                                     batch_size,
                   uint32_t                                   thread_count,
                   bool                                       pinned,

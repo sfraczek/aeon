@@ -22,6 +22,7 @@
 #include "block_manager.hpp"
 #include "provider_factory.hpp"
 #include "batch_iterator.hpp"
+#include "batch_decoder.hpp"
 
 using namespace std;
 using namespace nervana;
@@ -111,93 +112,29 @@ TEST(benchmark, cache)
     }
 }
 
-#define NOT_IMPLEMENTED throw std::runtime_error("not implemented");
-/* dummy_block_manager
+// #define NOT_IMPLEMENTED throw std::runtime_error("not implemented");
+/*
  *
  * Generates random images.
  *
  */
-class dummy_block_manager : virtual block_manager
+class dummy_batch_iterator : public async_manager_source<encoded_record_list>
 {
-    class generator
-        : public block_loader_source,
-          public async_manager<std::vector<std::vector<std::string>>, encoded_record_list>
-    {
-    public:
-        encoded_record_list* filler() override;
-        size_t               block_size() const override { NOT_IMPLEMENTED }
-        size_t               block_count() const override { NOT_IMPLEMENTED }
-        size_t               record_count() const override { NOT_IMPLEMENTED }
-        size_t               elements_per_record() const override { NOT_IMPLEMENTED }
-        source_uid_t         get_uid() const override { NOT_IMPLEMENTED }
-    };
-
 public:
-    dummy_block_manager(size_t block_size,
-                        size_t block_count,
-                        size_t record_count,
-                        size_t elements_per_record)
-        : async_manager<encoded_record_list,
-                        encoded_record_list>{static_pointer_cast<block_loader_source>(
-                                                 make_shared<generator>()),
-                                             "dummy_block_manager"}
-        , m_current_block_number{0}
-        , m_block_size{block_size}
-        , m_block_count{block_count}
-        , m_record_count{record_count}
-        , m_elements_per_record{elements_per_record}
-        , m_random_generator{random_device{}()}
+    dummy_batch_iterator(size_t batch_size, size_t element_count)
+        : m_batch_size(batch_size)
+        , m_element_count(element_count)
     {
     }
+    ~dummy_batch_iterator() {}
 
-    virtual ~dummy_block_manager() { finalize(); }
-    encoded_record_list* filler() override
-    {
-        m_state                    = async_state::wait_for_buffer;
-        encoded_record_list* rc    = get_pending_buffer();
-        m_state                    = async_state::processing;
-        encoded_record_list* input = nullptr;
-
-        rc->clear();
-
-        m_state = async_state::fetching_data;
-        input   = m_source->next();
-        m_state = async_state::processing;
-        if (input == nullptr)
-        {
-            rc = nullptr;
-        }
-        else
-        {
-            input->swap(*rc);
-        }
-
-        if (++m_current_block_number == m_block_count)
-        {
-            m_current_block_number = 0;
-            m_source->reset();
-        }
-
-        if (rc && rc->size() == 0)
-        {
-            rc = nullptr;
-        }
-
-        m_state = async_state::idle;
-        return rc;
-    }
-
-    virtual void initialize() override { m_current_block_number = 0; }
-    size_t       record_count() const override { return m_block_size; }
-    size_t       elements_per_record() const override { return m_elements_per_record; }
+    size_t               record_count() const override { return m_batch_size; }
+    size_t               elements_per_record() const override { return m_element_count; }
+    encoded_record_list* next() override { return nullptr; }
+    void                 reset() override {}
 private:
-    size_t            m_current_block_number;
-    size_t            m_block_size;
-    size_t            m_block_count;
-    size_t            m_record_count;
-    size_t            m_elements_per_record;
-    std::minstd_rand0 m_random_generator;
-    bool              m_enable_shuffle;
+    size_t m_batch_size;
+    size_t m_element_count;
 };
 
 TEST(benchmark, decode_and_transform)
@@ -207,10 +144,10 @@ TEST(benchmark, decode_and_transform)
 
     size_t batch_size          = 128;
     size_t decode_thread_count = 0;
-    size_t block_size          = 5005;
-    size_t record_count        = 1281167;
-    size_t block_count         = 256;
-    size_t elements_per_record;
+    // size_t block_size          = 5005;
+    // size_t record_count        = 1281167;
+    // size_t block_count         = 256;
+    size_t elements_per_record = 2;
     if (bsz)
     {
         std::istringstream iss(bsz);
@@ -222,16 +159,13 @@ TEST(benchmark, decode_and_transform)
         iss >> decode_thread_count;
     }
 
-    auto manager = make_shared<dummy_block_manager>(
-        block_size, block_count, record_count, elements_per_record);
-
     // Default ceil div to get number of batches
     // m_batch_count_value = (record_count + batch_size - 1) / batch_size;
     // m_batch_mode        = BatchMode::ONCE;
     using nlohmann::json;
 
-    int height;
-    int width;
+    int height = 10;
+    int width  = 10;
 
     json image_config = {{"type", "image"},
                          {"height", height},
@@ -272,8 +206,9 @@ TEST(benchmark, decode_and_transform)
 
     const int m_input_multiplier = 8;
     const int decode_size = batch_size * ((threads_num * m_input_multiplier - 1) / batch_size + 1);
-    auto      m_batch_iterator =
-        make_shared<batch_iterator>(static_pointer_cast<block_manager>(manager), decode_size);
+
+    auto m_batch_iterator = static_pointer_cast<async_manager_source<encoded_record_list>>(
+        make_shared<dummy_batch_iterator>(decode_size, elements_per_record));
 
     auto m_decoder = make_shared<batch_decoder>(m_batch_iterator,
                                                 decode_size,
@@ -283,9 +218,11 @@ TEST(benchmark, decode_and_transform)
                                                 0 /*random_seed*/);
 
     auto m_final_stage =
-        make_shared<batch_iterator_fbm>(m_decoder, batch_size, m_provider, false/*!batch_major)*/;
+        make_shared<batch_iterator_fbm>(m_decoder, batch_size, m_provider, false /*!batch_major*/);
 
-    auto m_output_buffer_ptr = m_final_stage->next();
+    auto                    m_output_buffer_ptr = m_final_stage->next();
+    const fixed_buffer_map* buf                 = m_output_buffer_ptr;
+    std::cout << buf->get_names()[0] << "\t" << buf->get_names()[1] << std::endl;
 }
 
 // TODO(sfraczek): move benchmarks from test_loader.cpp and other test files here

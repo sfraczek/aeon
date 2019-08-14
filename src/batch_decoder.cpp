@@ -21,7 +21,7 @@
 using namespace std;
 using namespace nervana;
 
-batch_decoder::batch_decoder(shared_ptr<batch_iterator>                 b_itor,
+batch_decoder::batch_decoder(shared_ptr<async_manager_source<encoded_record_list>>                 b_itor,
                              size_t                                     batch_size,
                              uint32_t                                   thread_count,
                              bool                                       pinned,
