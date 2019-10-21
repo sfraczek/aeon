@@ -149,7 +149,7 @@ shared_ptr<augment::image::params> augment::image::param_factory::make_params(
     settings->output_size = cv::Size2i(output_width, output_height);
 
     settings->angle                  = angle(random);
-    settings->flip                   = flip_distribution(random);
+    settings->flip                   = 1; //flip_distribution(random);
     settings->hue                    = hue(random);
     settings->contrast               = contrast(random);
     settings->brightness             = brightness(random);
@@ -216,8 +216,8 @@ shared_ptr<augment::image::params> augment::image::param_factory::make_params(
         float c_off_x = crop_offset(random);
         float c_off_y = crop_offset(random);
 
-        cv::Point2i cropbox_origin =
-            nervana::image::cropbox_shift(input_size, cropbox_size, c_off_x, c_off_y);
+        cv::Point2i cropbox_origin{0,0};
+        // =  nervana::image::cropbox_shift(input_size, cropbox_size, c_off_x, c_off_y);
         settings->cropbox = cv::Rect(cropbox_origin, cropbox_size);
     }
 

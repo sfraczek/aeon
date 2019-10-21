@@ -133,6 +133,33 @@ shared_ptr<image::decoded>
     return rc;
 }
 
+#include <fstream>
+template <typename T>
+void write_image(std::string name, const cv::Mat& img) {
+    std::ofstream f(name+"_aeon.txt");
+    const int channels = img.channels();
+    switch(channels)
+    {
+    case 1:
+        {
+            cv::MatIterator_<T> it, end;
+            for(auto it = img.begin<T>(), end = img.end<T>(); it != end; ++it)
+                f<< *it << "\n";
+            break;
+        }
+    case 3:
+        {
+            cv::MatIterator_<cv::Vec<T, 3>> it, end;
+            for(auto it = img.begin<cv::Vec<T, 3>>(), end = img.end<cv::Vec<T, 3>>(); it != end; ++it)
+            {
+                f << (*it)[0] << "\n";
+                f << (*it)[1] << "\n";
+                f << (*it)[2] << "\n";
+            }
+        }
+    }
+}
+
 /**
  * rotate
  * expand
@@ -145,10 +172,13 @@ shared_ptr<image::decoded>
 cv::Mat image::transformer::transform_single_image(shared_ptr<augment::image::params> img_xform,
                                                    cv::Mat& single_img) const
 {
+    static int id = 0;
+    write_image<uchar>(std::to_string(id)+"_opened", single_img);
     // img_xform->dump(cout);
     cv::Mat rotatedImage;
     image::rotate(single_img, rotatedImage, img_xform->angle);
-
+    if (img_xform->angle %360 != 0)
+        write_image<uchar>(std::to_string(id)+"_rotated", rotatedImage);
     cv::Mat expandedImage;
     if (img_xform->expand_ratio > 1.0)
         image::expand(
@@ -158,15 +188,18 @@ cv::Mat image::transformer::transform_single_image(shared_ptr<augment::image::pa
 
     // TODO(sfraczek): add test for this resize short
     cv::Mat resizedShortImage;
-    if (img_xform->resize_short_size == 0)
+    if (img_xform->resize_short_size == 0){
         resizedShortImage = expandedImage;
-    else
+    }else {
         image::resize_short(expandedImage,
                             resizedShortImage,
                             img_xform->resize_short_size,
                             img_xform->interpolation_method);
+        write_image<uchar>(std::to_string(id)+"_resized_short", resizedShortImage);
+    }
 
     cv::Mat croppedImage = resizedShortImage(img_xform->cropbox);
+    write_image<uchar>(std::to_string(id)+"_cropped", croppedImage);
     image::add_padding(croppedImage, img_xform->padding, img_xform->padding_crop_offset);
 
     cv::Mat resizedImage;
@@ -174,22 +207,24 @@ cv::Mat image::transformer::transform_single_image(shared_ptr<augment::image::pa
                   resizedImage,
                   img_xform->output_size,
                   img_xform->interpolation_method);
+    write_image<uchar>(std::to_string(id)+"_resized", resizedImage);
     photo.cbsjitter(resizedImage,
                     img_xform->contrast,
                     img_xform->brightness,
                     img_xform->saturation,
                     img_xform->hue);
     photo.lighting(resizedImage, img_xform->lighting, img_xform->color_noise_std);
-
+    write_image<uchar>(std::to_string(id)+"_distorted", resizedImage);
     cv::Mat flippedImage;
 
     if (img_xform->flip)
     {
         cv::flip(resizedImage, flippedImage, 1);
+        write_image<uchar>(std::to_string(id)+"_flipped", flippedImage);
     }
     else
         flippedImage = resizedImage;
-
+    id += 1;
     cv::Mat* finalImage = &flippedImage;
 
 #ifdef PYTHON_PLUGIN

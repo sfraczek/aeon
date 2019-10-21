@@ -554,12 +554,12 @@ static void benchmark_imagenet(json config, char* batch_delay, size_t batch_size
                 timer.stop();
                 float ms_time = timer.get_milliseconds();
                 float sec_time = ms_time / 1000.;
-                
+
                 cout << "batch " << current_batch << " of " << total_batch;
                 cout << " time " << sec_time;
                 cout << " " << batch_size * (float)batches_per_output / sec_time << " img/s";
                 cout << "\t\taverage "
-                        <<  batch_size * (float)batches_per_output / ((float)timer.get_total_milliseconds() 
+                        <<  batch_size * (float)batches_per_output / ((float)timer.get_total_milliseconds()
                             /timer.get_call_count()/1000.0f)
                         << " img/s" << endl;
                 timer.start();
@@ -704,6 +704,39 @@ TEST(benchmark, imagenet_paddle)
 
         benchmark_imagenet(config, batch_delay, batch_size);
     }
+}
+
+TEST(benchmark, reproduce_error)
+{
+        json image_config = {{"type", "image"},
+                             {"height", 244},
+                             {"width", 244},
+                             {"channels", 3},
+                             {"output_type", "uint8_t"},
+                             {"channel_major", false},
+                             {"bgr_to_rgb", false}};
+
+        json label_config = {{"type", "label"}, {"binary", false}};
+
+        auto aug_config = vector<json>{{{"type", "image"},
+                                        {"flip_enable", false},
+                                        {"center", false},
+                                        {"crop_enable", false}
+                                        }};
+        int batch_size = 1;
+        json config = {{"random_seed", 1},
+                       {"cpu_list", "0"},
+                       {"manifest_root", "/mnt/drive/data/ILSVRC2012"},
+                       {"cache_directory", ""},
+                       {"etl", {image_config, label_config}},
+                       {"manifest_filename", "/mnt/drive/data/ILSVRC2012/val-index.csv"},
+                       {"iteration_mode", "INFINITE"},
+                       {"shuffle_enable", false},
+                       {"shuffle_manifest", false},
+                       {"augmentation", aug_config},
+                       {"batch_size", batch_size}};
+
+        benchmark_imagenet(config,  nullptr, batch_size);
 }
 
 TEST(benchmark, decode_jpeg)
