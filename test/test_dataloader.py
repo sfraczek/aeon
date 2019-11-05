@@ -52,10 +52,6 @@ def test_loader_invalid_manifest():
 
 def test_loader_broken_image1():
     manifest_filename = 'test_data/broken_file_manifest.tsv'
-    broken_filename = "test_data/broken_jpeg.JPEG"
-    with open (manifest_filename, 'w') as f:
-        f.write("@FILE\tASCII_INT\n")
-        f.write(broken_filename+"\t0\n")
     config = generic_config(manifest_filename, batch_size)
 
     with pytest.raises(Exception) as ex:
@@ -63,7 +59,6 @@ def test_loader_broken_image1():
     assert 'Input image contains invalid data or the buffer is too short' in str(ex)
 
 def test_loader_broken_image2():
-    filename = tempfile.mkstemp()[1]
     manifest = random_manifest(2, broken_image_index=1)
     config = generic_config(manifest.name, batch_size)
 
